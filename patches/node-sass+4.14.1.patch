@@ -1,0 +1,52 @@
+diff --git a/node_modules/node-sass/lib/render.js b/node_modules/node-sass/lib/render.js
+index 858e02e..2eae2ba 100644
+--- a/node_modules/node-sass/lib/render.js
++++ b/node_modules/node-sass/lib/render.js
+@@ -42,11 +42,15 @@ module.exports = function(options, emitter) {
+     renderOptions.file = options.src;
+   }
+ 
++  var _patch_retries = 0;
++  var _patch_max_retries = 4;
++  var _patch_timeout_base = 5;
+   var sourceMap = options.sourceMap;
+   var destination = options.dest;
+   var stdin = options.stdin;
+ 
+   var success = function(result) {
++    _patch_retries = 0;
+     var todo = 1;
+     var done = function() {
+       if (--todo <= 0) {
+@@ -105,7 +109,30 @@ module.exports = function(options, emitter) {
+   };
+ 
+   var error = function(error) {
+-    emitter.emit('error', chalk.red(JSON.stringify(error, null, 2)));
++    if (_patch_isFileUnreadable(error) && _patch_retries < _patch_max_retries) {
++      _patch_retries++;
++      setTimeout(function () {
++        sass.render(renderOptions, renderCallback);
++      }, Math.pow(_patch_retries, _patch_timeout_base));
++    }
++    else {
++      emitter.emit('error', chalk.red(JSON.stringify(error, null, 2)));
++    }
++  };
++
++  var _patch_isFileUnreadable = function(error) {
++    var unreadable = typeof error.message === 'string' &&
++    (
++        error.message.startsWith('File to read not found or unreadable: ') ||
++        error.message.startsWith('File to import not found or unreadable: ')
++    );
++
++    if (unreadable) {
++      var file = error.message.split('not found or unreadable: ')[1].trim();
++      return fs.existsSync(file);
++    }
++
++    return false;
+   };
+ 
+   var renderCallback = function(err, result) {
